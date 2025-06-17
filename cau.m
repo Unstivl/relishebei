@@ -35,7 +35,7 @@ for m = 1:Ns
     for jj = 1:Ns+1
         F_(m,jj) = F(m,jj,B,d_out,deltaPhi,Ns);
     end
-    F_(m,Ns+2) = F(m,0,B,d_out,deltaPhi,Ns);
+    F_(m,Ns+2) = F(m,0,B,d_out,deltaPhi,Ns); % 对环境的角系数
 end
 
 % 第Ns+1行是对环境，即0的角系数；这一行第Ns+1列为1减前Ns列，Ns+2列为自身对自身=0
@@ -44,6 +44,7 @@ for jj = 1:Ns
 end
 
 F_(Ns+1,Ns+1) = 1 - sum(F_(Ns+1,1:Ns)); % 对环境的角系数归一性
+F_(Ns+1,Ns+2) = 0; % 自己对自己
 
 % 验证角系数归一性
 % rowSums = sum(F_, 2);
@@ -51,27 +52,59 @@ F_(Ns+1,Ns+1) = 1 - sum(F_(Ns+1,1:Ns)); % 对环境的角系数归一性
 
 %%
 
-T_wall = (290+273.15)*ones(Ns,1); % 壁面温度
+T_wall = (290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),Ns); % 壁面温度
+T_Ns1 = (290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),1);
+q_0 = zeros(floor(H*N_p/N_fp/deltaZ),1); % 出射环境热流
+q_j = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面辐射热流
+q_h = 16e5*ones(floor(H*N_p/N_fp/deltaZ),1); % 镜场热辐射决定的
+% for ii = 1:floor(H*N_p/N_fp/deltaZ)
+%     z = ii*deltaZ - H*floor(ii*deltaZ/H);
+%     q_h(ii) = q_h(ii).*sin(z/H*pi); 
+% end % 一种假设的分布：沿着吸热器周向均匀，轴向sin
+
+for ii = 1:floor(H*N_p/N_fp/deltaZ)
+    q_h(ii) = q_h(ii)* cos(floor(ii*deltaZ/H)/floor(N_p/N_fp)*pi/2);
+end % 一种假设的分布：沿着吸热器轴向均匀，周向cos
 
 T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25; % 环境温度
 
-for z_num = 1:floor(H/deltaZ)
-    z = (z_num-0.5)*deltaZ; % 取管道上网格的中心
+% for z_num = 1:floor(H*N_p/N_fp/deltaZ)
+    % z = (z_num-0.5)*deltaZ; % 取管道上网格的中心
+    z_num = 1
 
-    eps0 = epsilon_gr
+    eps0 = epsilon_gr;
     RadA = zeros(Ns+1,Ns+1);
     for m=1:Ns
-        RadA(m,1) = (kDelta(m,0)/eps0-(1/eps0 - 1)*F_(m,Ns+2))/sig;
+        RadA(m,1) = (kDelta(m,0)/eps0-(1/eps0 - 1)*F_(m,Ns+2))/sig; % 对应q_0
         for jj=1:Ns
             RadA(m,jj+1) = (kDelta(m,jj)/epsilon_t-(1/epsilon_t - 1)*F_(m,jj))/sig;
         end % 对应q_j
     end % 第一行到第Ns行，代表m=1,...,Ns
 
-    for jj=1:Ns+1
-        RadA(Ns+1,jj) = (kDelta(Ns+1,jj)/epsilon_N_s1-(1/epsilon_N_s1 - 1)*F_(Ns+1,jj))/sig;
+    % m=0情况
+    RadA(Ns+1,1) = (kDelta(0,0)/eps0-(1/eps0 - 1)*F_(Ns+1,Ns+2))/sig; % 对应q_0
+    for jj=1:Ns % 对应q_j
+        RadA(Ns+1,jj+1) = (kDelta(0,jj)/epsilon_t-(1/epsilon_t - 1)*F_(Ns+1,jj))/sig;
     end % 最后一行，代表m=Ns+1
 
+    Radb = zeros(Ns+1,1);
+    for m=1:Ns
+        Radb(m) = (kDelta(m,Ns+1)-F_(m,Ns+1))*T_Ns1(z_num)^4 + (kDelta(m,0)-F_(m,Ns+2))*T_0^4 ;
+        for jj=1:Ns
+            Radb(m) = (kDelta(m,jj)-F_(m,jj))*T_wall(z_num,jj)^4 + Radb(m);
+        end
+        Radb(m) = Radb(m) - F_(m,Ns+2)*q_h(z_num)/sig*alpha_;
+    end
 
+    Radb(Ns+1) = (kDelta(0,Ns+1)-F_(Ns+1,Ns+1))*T_Ns1(z_num)^4 + (kDelta(0,0)-F_(Ns+1,Ns+2))*T_0^4;
+    for jj=1:Ns
+        Radb(Ns+1) = (kDelta(0,jj)-F_(Ns+1,jj))*T_wall(z_num,jj)^4 + Radb(Ns+1);
+    end
+    Radb(Ns+1) = Radb(Ns+1) - F_(Ns+1,Ns+2)*q_h(z_num)/sig*alpha_;
+
+    q = RadA\Radb; % 求解辐射热流
+    q_0(z_num) = q(1); % 对应q_0
+    q_j(z_num,:) = q(2:Ns+1)'; % 对应q_j
 
 
 
