@@ -1,8 +1,27 @@
 clc
 clear
 
+sig = 5.67e-8; % Stefan-Boltzmann constant
+d_int = 38.9e-3;
 d_out = 42.2e-3; % 外径
 B = 44.2e-3; % 管圆心距离
+H = 7.4; % 吸热器高度
+T_salt_0 = 290+273.15; % 初始盐温度
+T_sky = 19.5+273.15; % 天空温度
+T_amb = 30+273.15; % 环境温度
+N_fp = 2; % 吸热器路径数
+N_p = 18; % z方向上的panel数（Fig1），是多条路径的网格数的和
+N_t = 24; % 吸热器总的网格数（熔融盐流动方向）
+epsilon_t = 0.87; % 吸热管发射率
+epsilon_sky = 0.895;
+epsilon_N_s1 = 0.2;
+epsilon_gr = 0.955;
+alpha_ = 0.96; % 吸热管吸收率
+R_foul = 8.8e-5;
+v = 15; % 风速m/s
+m_ = 281.6; % 熔融盐流量kg/s，case C
+
+
 Ns = 37; % 柱坐标角向网格数
 
 deltaZ = 13*d_out; % 柱坐标纵向网格长度
@@ -10,18 +29,47 @@ deltaPhi = pi/Ns; % 柱坐标角向网格角宽度
 
 sigma = 5.67e-8; % Stefan-Boltzmann constant
 
-Farray = zeros(Ns, Ns+2);
+F_ = zeros(Ns+1, Ns+2);
 
 for m = 1:Ns
-    for j = 1:Ns+1
-        Farray(m,j) = F(m,j,B,d_out,deltaPhi,Ns);
+    for jj = 1:Ns+1
+        F_(m,jj) = F(m,jj,B,d_out,deltaPhi,Ns);
     end
-    Farray(m,Ns+2) = F(m,0,B,d_out,deltaPhi,Ns);
+    F_(m,Ns+2) = F(m,0,B,d_out,deltaPhi,Ns);
 end
 
-% Calculate the sum of each row in Farray
-rowSums = sum(Farray, 2);
-mean(abs(rowSums - 1))
+% 第Ns+1行是对环境，即0的角系数；这一行第Ns+1列为1减前Ns列，Ns+2列为自身对自身=0
+for jj = 1:Ns
+    F_(Ns+1,jj) = F0(jj,B,d_out,deltaPhi,Ns);
+end
+
+F_(Ns+1,Ns+1) = 1 - sum(F_(Ns+1,1:Ns)); % 对环境的角系数归一性
+
+% 验证角系数归一性
+% rowSums = sum(F_, 2);
+% mean(abs(rowSums - 1))
+
+%%
+
+T_wall = (290+273.15)*ones(Ns,1); % 壁面温度
+
+T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25; % 环境温度
+
+for z_num = 1:floor(H/deltaZ)
+    z = (z_num-0.5)*deltaZ; % 取管道上网格的中心
+
+    eps0 = epsilon_gr
+    RadA = zeros(Ns+1,Ns+1);
+    for m=1:Ns
+        RadA(m,1) = (kDelta(m,0)/eps0-(1/eps0 - 1)*F_(m,Ns+2))/sig;
+        for jj=1:Ns
+            RadA(m,jj+1) = (kDelta(m,jj)/epsilon_t-(1/epsilon_t - 1)*F_(m,jj))/sig;
+        end % 对应q_j
+    end % 第一行到第Ns行，代表m=1,...,Ns
+
+    for jj=1:Ns+1
+        RadA(Ns+1,jj) = (kDelta(Ns+1,jj)/epsilon_N_s1-(1/epsilon_N_s1 - 1)*F_(Ns+1,jj))/sig;
+    end % 最后一行，代表m=Ns+1
 
 
 
@@ -40,12 +88,25 @@ mean(abs(rowSums - 1))
 
 
 
-
-function val = kroneckerDelta(m, n)
+function val = kDelta(m, n)
     if m == n
         val = 1;
     else
         val = 0;
+    end
+end
+
+
+
+function val = F0(j,B,d_out,deltaPhi,Ns)
+    F_0 = F(j,0,B,d_out,deltaPhi,Ns);
+    if F_0 <= 0
+        val = 0;
+    else
+        cd = d_out/2 * deltaPhi;
+        % ce = sqrt( B.^2 - B.*d_out.*cos((j+1)*deltaPhi-0.5*pi));
+        % val = 1/B* (F_0.*cd + ce);
+        val = 1/B* (F_0.*cd);
     end
 end
 
