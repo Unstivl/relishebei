@@ -1,11 +1,14 @@
 clc
 clear
 
+TOL = 1e-3;
+nnMax = 10;
 sig = 5.67e-8; % Stefan-Boltzmann constant
 d_int = 38.9e-3;
 d_out = 42.2e-3; % 外径
 B = 44.2e-3; % 管圆心距离
 H = 7.4; % 吸热器高度
+D = 6; % 吸热器直径
 T_salt_0 = 290+273.15; % 初始盐温度
 T_sky = 19.5+273.15; % 天空温度
 T_amb = 30+273.15; % 环境温度
@@ -20,6 +23,19 @@ alpha_ = 0.96; % 吸热管吸收率
 R_foul = 8.8e-5;
 v = 15; % 风速m/s
 m_ = 281.6; % 熔融盐流量kg/s，case C
+
+% 以下计算对流换热
+g = 9.81; % 重力加速度
+nu = refpropm('V','T',T_amb,'P',1e5,'AIR.MIX')/refpropm('D','T',T_amb,'P',1e5,'AIR.MIX'); % 运动粘度
+Pr = refpropm('C','T',T_amb,'P',1e5,'AIR.MIX')*refpropm('V','T',T_amb,'P',1e5,'AIR.MIX')/refpropm('L','T',T_amb,'P',1e5,'AIR.MIX'); % Prandtl number
+Gr_H = g*(1/T_amb)*(T_salt_0 - T_amb)*H^3/(nu^2); % Grashof number
+Nu_H = 0.11*(Gr_H*Pr)^(1/3); % Nusselt number
+h_nc = Nu_H*refpropm('L','T',T_amb,'P',1e5,'AIR.MIX')/H; % 自然对流换热系数
+Re_D = v*D/nu; % Reynolds number
+Nu_D = 0.18*Re_D^0.63;
+h_fc = Nu_D*refpropm('L','T',T_amb,'P',1e5,'AIR.MIX')/D; % 强制对流换热系数
+h = (h_nc^3.2 + h_fc^3.2)^(1/3.2);
+
 
 
 Ns = 37; % 柱坐标角向网格数
@@ -52,26 +68,32 @@ F_(Ns+1,Ns+2) = 0; % 自己对自己
 
 %%
 
-T_wall = (290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),Ns); % 壁面温度
-T_Ns1 = (290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),1);
+T_wall = (10+290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),Ns); % 壁面温度
+T_wall_mean = zeros(floor(H*N_p/N_fp/deltaZ),1); % 壁面平均温度
+T_Ns1 = (10+290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),1); % 保温层温度
+T_salt = (290+273.15)*ones(floor(H*N_p/N_fp/deltaZ),1); % 盐温度
 q_0 = zeros(floor(H*N_p/N_fp/deltaZ),1); % 出射环境热流
+q_c_l = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面对流热流
+q_r_l = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面辐射热流
 q_j = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面辐射热流
-q_h = 16e5*ones(floor(H*N_p/N_fp/deltaZ),1); % 镜场热辐射决定的
+q_h = 2e6*ones(floor(H*N_p/N_fp/deltaZ),1); % 镜场热辐射决定的
+q_t = q_h-q_c_l-q_r_l; % 吸热管壁面总热流
 % for ii = 1:floor(H*N_p/N_fp/deltaZ)
 %     z = ii*deltaZ - H*floor(ii*deltaZ/H);
 %     q_h(ii) = q_h(ii).*sin(z/H*pi); 
 % end % 一种假设的分布：沿着吸热器周向均匀，轴向sin
 
-for ii = 1:floor(H*N_p/N_fp/deltaZ)
-    q_h(ii) = q_h(ii)* cos(floor(ii*deltaZ/H)/floor(N_p/N_fp)*pi/2);
-end % 一种假设的分布：沿着吸热器轴向均匀，周向cos
+% for ii = 1:floor(H*N_p/N_fp/deltaZ)
+%     q_h(ii) = q_h(ii)* cos(floor(ii*deltaZ/H)/floor(N_p/N_fp)*pi/2);
+% end % 一种假设的分布：沿着吸热器轴向均匀，周向cos
 
 T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25; % 环境温度
 
 % for z_num = 1:floor(H*N_p/N_fp/deltaZ)
-    % z = (z_num-0.5)*deltaZ; % 取管道上网格的中心
+%     z = (z_num-0.5)*deltaZ; % 取管道上网格的中心
     z_num = 1
-
+for nn = 1:nnMax
+    T_wall_old = T_wall(z_num,:); % 保存旧的壁面温度
     eps0 = epsilon_gr;
     RadA = zeros(Ns+1,Ns+1);
     for m=1:Ns
@@ -85,7 +107,7 @@ T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25
     RadA(Ns+1,1) = (kDelta(0,0)/eps0-(1/eps0 - 1)*F_(Ns+1,Ns+2))/sig; % 对应q_0
     for jj=1:Ns % 对应q_j
         RadA(Ns+1,jj+1) = (kDelta(0,jj)/epsilon_t-(1/epsilon_t - 1)*F_(Ns+1,jj))/sig;
-    end % 最后一行，代表m=Ns+1
+    end % 最后一行，代表m=0
 
     Radb = zeros(Ns+1,1);
     for m=1:Ns
@@ -93,7 +115,7 @@ T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25
         for jj=1:Ns
             Radb(m) = (kDelta(m,jj)-F_(m,jj))*T_wall(z_num,jj)^4 + Radb(m);
         end
-        Radb(m) = Radb(m) - F_(m,Ns+2)*q_h(z_num)/sig*alpha_;
+        Radb(m) = Radb(m) - F_(m,Ns+2).*q_h(z_num)/sig*alpha_;
     end
 
     Radb(Ns+1) = (kDelta(0,Ns+1)-F_(Ns+1,Ns+1))*T_Ns1(z_num)^4 + (kDelta(0,0)-F_(Ns+1,Ns+2))*T_0^4;
@@ -101,10 +123,68 @@ T_0 = ((epsilon_sky*T_sky^4 + epsilon_gr*T_amb^4)/(epsilon_gr+epsilon_sky))^0.25
         Radb(Ns+1) = (kDelta(0,jj)-F_(Ns+1,jj))*T_wall(z_num,jj)^4 + Radb(Ns+1);
     end
     Radb(Ns+1) = Radb(Ns+1) - F_(Ns+1,Ns+2)*q_h(z_num)/sig*alpha_;
-
+    Radb = Radb*sig;
     q = RadA\Radb; % 求解辐射热流
+    q = q/sig;
     q_0(z_num) = q(1); % 对应q_0
     q_j(z_num,:) = q(2:Ns+1)'; % 对应q_j
+
+
+    q_c_l(z_num,:) = h.*(T_wall(z_num,:)-T_amb);
+    q_r_l(z_num,:) = -q_0(z_num) *2*B./(d_out.*deltaPhi.*(1:Ns)); % 吸热管壁面辐射热流 
+    % q_r_l(z_num,:) = -q_0(z_num) *2*B./(d_out.*deltaPhi);
+    % q_r_l(z_num,:) = -q_0(z_num);
+    q_t(z_num,:) = q_h(z_num) - q_c_l(z_num,:) - q_r_l(z_num,:);
+
+    % if z_num == 1
+    %     T_salt(z_num) = T_salt_0 + q_t(z_num,:)*(d_out/2*2*pi)*(deltaZ/2)/(m_*Cp_salt(T_salt_0)); % 计算盐温度
+    % else
+    %     T_salt(z_num) = T_salt(z_num-1) + q_t(z_num,:)*(d_out/2*2*pi)*(deltaZ)/(m_*Cp_salt(T_salt(z_num-1))); % 计算盐温度
+    % end % 得到了熔融盐温度
+
+    % 反算吸热管温度
+    T_wall_mean(z_num) = mean(T_wall(z_num,:));
+    if z_num == 1
+        U = ((d_out*log(d_out/d_int))/(2*k_t(T_salt_0)) + R_foul*d_out/d_int + d_out/d_int/h_salt(T_salt_0,m_,d_int))^(-1);
+        NTU = U*pi*d_out*(z_num-0.5)*deltaZ/(m_*Cp_salt(T_salt_0));
+    else
+        U = ((d_out*log(d_out/d_int))/(2*k_t(T_salt(z_num-1))) + R_foul*d_out/d_int + d_out/d_int/h_salt(T_salt(z_num-1),m_,d_int))^(-1);
+        NTU = U*pi*d_out*(z_num-0.5)*deltaZ/(m_*Cp_salt(T_salt(z_num-1))); 
+    end
+    
+    T_salt(z_num) = T_wall_mean(1) - (T_wall_mean(1)-T_salt_0)*exp(-NTU*(z_num-0.5)*deltaZ/(H*N_p/N_fp)); % 计算盐温度
+
+    T_wall(z_num,:) = q_t(z_num,:)./U + T_salt(z_num); % 计算吸热管壁面温度
+
+    % 计算保温层温度
+    T_Ns1 = (kDelta(Ns+1,0)/eps0-(1/eps0 - 1)*F_(Ns+1,Ns+1))/sig*q_0(z_num); 
+    for jj=1:Ns
+        T_Ns1 = T_Ns1 + (kDelta(Ns+1,jj)/epsilon_t-(1/epsilon_t - 1)*F_(m,Ns-jj+1))/sig * q_j(z_num,jj);
+    end % 对应q_j
+    T_Ns1 = T_Ns1 - (kDelta(Ns+1,0) - F_(Ns+1,Ns+1))*T_0^4; % 对应q_0
+    for jj=1:Ns
+        T_Ns1 = T_Ns1 - (kDelta(Ns+1,jj)-F_(Ns+1,Ns-jj+1))*T_wall(z_num,jj)^4;
+    end
+    T_Ns1 = T_Ns1 + F_(Ns+1,Ns+1)*q_h(z_num)/sig*alpha_; % 对应q_h
+    T_Ns1 = T_Ns1^(0.25); % 保温层温度
+
+    if max(abs(T_wall(z_num,:) - T_wall_old))< TOL
+        fprintf('迭代完成，迭代次数为 %d, z_num = %d\n', nn, z_num);
+        break; 
+    elseif nn == nnMax
+        fprintf('迭代未收敛，迭代次数为 %d, z_num = %d\n', nn, z_num);
+        break;
+    end
+end
+    
+
+    
+
+
+
+
+
+
 
 
 
@@ -173,4 +253,22 @@ function val = F(m,j,B,d_out,deltaPhi,Ns) % 第m块微元对第j块微元的角�
     else
         error('j must be in the range [0, Ns+1]');
     end
+end
+
+function val = Cp_salt(T)
+    val = 1443 + 0.172*(T-273.15);
+end
+
+function val = k_t(T)
+    val = 0.443 + 1.9e-4*(T-273.15); % W/m/K
+end
+
+function val = h_salt(T,m_,d_int)
+    t = T - 273.15; % 摄氏度
+    nu = 22.714 - 0.12*t + 2.281e-4*t^2 - 1.474e-7*t^3; % 动力粘度
+    nu = nu*1e-3;
+    Re = 4*m_/(pi*nu*d_int); % 雷诺数
+    Pr = Cp_salt(T)*nu/k_t(T);
+    Nu = 0.023*Re^0.8*Pr^0.4;
+    val = Nu*k_t(T)/d_int; % 强制对流换热系数
 end
