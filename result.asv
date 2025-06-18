@@ -1,0 +1,30 @@
+clear
+clc
+close all
+load('cauResult.mat');
+
+x = 0.5:1:(0.5 + floor(deltaZ./H));
+y = 0.5:1:H/deltaZ+0.5;
+[X, Y] = meshgrid(x, y);
+z = zeros(size(X));
+
+for xx = 1:size(X,1)
+    for yy = 1:size(X,1)
+        if (-1)^xx < 0
+            z(xx,yy) = (xx-1)*size(X,1) + yy; 
+        else
+            z(xx,yy) = (xx-1)*size(X,1) + (size(X,1) - yy + 1);
+        end
+    end
+end
+z=z';
+
+figure;
+imagesc(x, y, z);
+colormap(hot); % You can use different colormaps like 'hot', 'parula', 'viridis'
+colorbar;
+xlabel('X-axis');
+ylabel('Y-axis');
+title('2D Heatmap of Random Data');
+axis equal tight;
+

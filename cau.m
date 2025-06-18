@@ -41,7 +41,8 @@ h = (h_nc^3.2 + h_fc^3.2)^(1/3.2);
 
 Ns = 37; % 柱坐标角向网格数
 
-deltaZ = 13*d_out; % 柱坐标纵向网格长度
+% deltaZ = 13*d_out; % 柱坐标纵向网格长度
+deltaZ = H/14; % 柱坐标纵向网格长度
 deltaPhi = pi/Ns; % 柱坐标角向网格角宽度
 
 sigma = 5.67e-8; % Stefan-Boltzmann constant
@@ -77,7 +78,7 @@ q_0 = zeros(floor(H*N_p/N_fp/deltaZ),1); % 出射环境热流
 q_c_l = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面对流热流
 q_r_l = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面辐射热流
 q_j = zeros(floor(H*N_p/N_fp/deltaZ),Ns); % 吸热管壁面辐射热流
-q_h = 2e6*ones(floor(H*N_p/N_fp/deltaZ),1); % 镜场热辐射决定的
+q_h = 1.6e6*ones(floor(H*N_p/N_fp/deltaZ),1); % 镜场热辐射决定的
 q_t = q_h-q_c_l-q_r_l; % 吸热管壁面总热流
 % for ii = 1:floor(H*N_p/N_fp/deltaZ)
 %     z = ii*deltaZ - H*floor(ii*deltaZ/H);
@@ -179,6 +180,7 @@ for z_num = 1:floor(H*N_p/N_fp/deltaZ)
     end
 end
 
+save cauResult.mat
     
 
 
