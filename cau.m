@@ -183,27 +183,6 @@ end
 save cauResult.mat
     
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function val = kDelta(m, n)
     if m == n
         val = 1;
