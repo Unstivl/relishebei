@@ -44,7 +44,7 @@ figure;
 subplot(1, 2, 1);
 imagesc(x, y, T_wall_z);
 clim([minVal maxVal])
-xlabel('角向位置（以panel计）', 'FontSize', 14, 'FontWeight', 'bold');
+xlabel('角向位置（以管屏数计）', 'FontSize', 14, 'FontWeight', 'bold');
 ylabel('高度（以网格计）', 'FontSize', 14, 'FontWeight', 'bold');
 title('HTM模型吸热管壁面温度', 'FontSize', 14, 'FontWeight', 'bold');
 axis equal tight;
@@ -52,10 +52,10 @@ axis equal tight;
 subplot(1, 2, 2);
 imagesc(x, y, T_salt_z);
 clim([minVal maxVal])
-xlabel('角向位置（以panel计）', 'FontSize', 14, 'FontWeight', 'bold');
+xlabel('角向位置（以管屏数计）', 'FontSize', 14, 'FontWeight', 'bold');
 ylabel('高度（以网格计）', 'FontSize', 14, 'FontWeight', 'bold');
 title('HTM模型吸热管熔融盐温度', 'FontSize', 14, 'FontWeight', 'bold');
 axis equal tight;
 
-colormap('autumn');
+colormap('jet');
 colorbar;
